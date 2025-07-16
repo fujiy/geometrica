@@ -10,4 +10,4 @@ pub mod euclidean;
 pub mod kinematics;
 
 // pub use linear_space::{AffineFrame, AffineSpace, Basis, LinearSpace};
-// pub use manifold::{LieGroup, Manifold};
+pub use manifold::Scalar;

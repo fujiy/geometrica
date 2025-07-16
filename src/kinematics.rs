@@ -30,6 +30,14 @@ impl<const N: usize, G: LieGroup<N>> LieGroupKinematics<N, G> {
     }
 }
 
+impl<const N: usize, const D: usize, C: Chart<N>, G: LieGroup<N> + ChartTransform<N, D, C>>
+    LieGroupKinematics<N, G>
+{
+    pub fn transform(&self, chart: &C) -> G::M {
+        chart.from_local(&self.point.to_local())
+    }
+}
+
 pub struct MovingChart<const N: usize, C: Chart<N>> {
     pub chart: C,
     pub velocity: C::InducedVectorField,
