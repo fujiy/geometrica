@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use nalgebra as na;
 
 use crate::manifold::{Chart, Manifold, VectorField, ZeroVectorField};
@@ -154,6 +156,29 @@ impl<const N: usize, V: LinearSpace<N>> std::ops::Index<usize> for Basis<N, V> {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.basis[index]
+    }
+}
+
+struct OrthogonalBasis<const N: usize, V: LinearSpace<N>>(Basis<N, V>);
+
+impl<const N: usize, V: LinearSpace<N>> Deref for OrthogonalBasis<N, V> {
+    type Target = Basis<N, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<const N: usize, V: LinearSpace<N>> DerefMut for OrthogonalBasis<N, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<const N: usize, V: LinearSpace<N>> OrthogonalBasis<N, V> {
+    pub fn new(vectors: [V; N]) -> Self {
+        let duals = V::dual_basis(&vectors);
+        OrthogonalBasis(Basis::new_with_dual(vectors, duals))
     }
 }
 

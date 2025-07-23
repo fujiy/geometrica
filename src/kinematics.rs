@@ -30,13 +30,15 @@ impl<const N: usize, G: LieGroup<N>> LieGroupKinematics<N, G> {
     }
 }
 
-impl<const N: usize, const D: usize, C: Chart<N>, G: LieGroup<N> + ChartTransform<N, D, C>>
-    LieGroupKinematics<N, G>
-{
-    pub fn transform(&self, chart: &C) -> G::M {
-        chart.from_local(&self.point.to_local())
-    }
-}
+// impl<const N: usize, G: LieGroup<N>> LieGroupKinematics<N, G> {
+//     pub fn transform<const D: usize, C>(&self, chart: &C) -> C::M
+//     where
+//         C: Chart<N, M = G>,
+//         G: ChartTransform<N, D, C>,
+//     {
+//         chart.from_local(&self.point.to_local())
+//     }
+// }
 
 pub struct MovingChart<const N: usize, C: Chart<N>> {
     pub chart: C,
