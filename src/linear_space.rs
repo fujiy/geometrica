@@ -1,16 +1,11 @@
-use std::ops::{Deref, DerefMut};
-
 use nalgebra as na;
 
-use crate::manifold::{Chart, Manifold, VectorField, ZeroVectorField};
+use crate::manifold::{Chart, LieGroup, Manifold, Torsor, VectorField, ZeroVectorField};
 
 // Affine Space
 
-pub trait AffineSpace<const N: usize>: Manifold<N> {
-    type VectorSpace: LinearSpace<N, Field = <Self as Manifold<N>>::Field>;
-
-    fn translate(&self, other: &Self::VectorSpace) -> Self;
-    fn difference(&self, other: &Self) -> Self::VectorSpace;
+pub trait AffineSpace<const N: usize>: Torsor<N, Self::VectorSpace> {
+    type VectorSpace: LinearSpace<N, Field = <Self as Manifold<N>>::Field> + LieGroup<N>;
 }
 
 // Affine Frame for affine space
@@ -26,22 +21,32 @@ impl<const N: usize, A: AffineSpace<N>> AffineFrame<N, A> {
     }
 }
 
-impl<const N: usize, A: AffineSpace<N>> Chart<N> for AffineFrame<N, A> {
-    type M = A;
+// generic_const_exprs pls...
+// impl<const N: usize, A: AffineSpace<N>> Manifold<{ N + N * N }> for AffineFrame<N, A> {
+//    type Field = A::Field;
+// }
+impl<A: AffineSpace<1>> Manifold<2> for AffineFrame<1, A> {
+    type Field = A::Field;
+}
+impl<A: AffineSpace<2>> Manifold<6> for AffineFrame<2, A> {
+    type Field = A::Field;
+}
+impl<A: AffineSpace<3>> Manifold<12> for AffineFrame<3, A> {
+    type Field = A::Field;
+}
+
+impl<const N: usize, A: AffineSpace<N>> Chart<N, A> for AffineFrame<N, A> {
     type InducedVectorField = AffineVectorField<N, A>;
 
-    fn to_local(&self, point: &Self::M) -> [<Self::M as Manifold<N>>::Field; N] {
+    fn to_local(&self, point: &A) -> [A::Field; N] {
         self.basis.to_local(&point.difference(&self.origin))
     }
 
-    fn from_local(&self, point: &[<Self::M as Manifold<N>>::Field; N]) -> Self::M {
-        self.origin.translate(&self.basis.from_local(point))
+    fn from_local(&self, point: &[A::Field; N]) -> A {
+        self.origin.act(&self.basis.from_local(point))
     }
 
-    fn _induced_basis(
-        &self,
-        _point: &Self::M,
-    ) -> [na::SVector<<Self::M as Manifold<N>>::Field, N>; N] {
+    fn _induced_basis(&self, _point: &A) -> [na::SVector<A::Field, N>; N] {
         A::VectorSpace::_induced_basis(&self.basis)
     }
 }
@@ -62,7 +67,148 @@ struct AffineGroup<const N: usize, A: AffineSpace<N>> {
     pub frame: AffineFrame<N, A>,
 }
 
-// Linear Space
+pub struct OrthogonalAffineFrame<
+    const N: usize,
+    A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>,
+> {
+    pub origin: A,
+    pub basis: OrthogonalBasis<N, A::VectorSpace>,
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>>
+    OrthogonalAffineFrame<N, A>
+{
+    pub fn new(origin: A, basis: OrthogonalBasis<N, A::VectorSpace>) -> Self {
+        OrthogonalAffineFrame { origin, basis }
+    }
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Into<AffineFrame<N, A>>
+    for OrthogonalAffineFrame<N, A>
+{
+    fn into(self) -> AffineFrame<N, A> {
+        AffineFrame {
+            origin: self.origin,
+            basis: self.basis.into(),
+        }
+    }
+}
+
+// generic_const_exprs pls...
+// impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Manifold<{ N + N * (N + 1) / 2 }> for OrthogonalAffineFrame<N, A> {
+//    type Field = A::Field;
+// }
+impl<A: AffineSpace<1, VectorSpace: InnerProductSpace<1>>> Manifold<3>
+    for OrthogonalAffineFrame<1, A>
+{
+    type Field = A::Field;
+}
+impl<A: AffineSpace<2, VectorSpace: InnerProductSpace<2>>> Manifold<6>
+    for OrthogonalAffineFrame<2, A>
+{
+    type Field = A::Field;
+}
+impl<A: AffineSpace<3, VectorSpace: InnerProductSpace<3>>> Manifold<12>
+    for OrthogonalAffineFrame<3, A>
+{
+    type Field = A::Field;
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Chart<N, A>
+    for OrthogonalAffineFrame<N, A>
+{
+    type InducedVectorField = AffineVectorField<N, A>;
+
+    fn to_local(&self, point: &A) -> [A::Field; N] {
+        self.basis.to_local(&point.difference(&self.origin))
+    }
+
+    fn from_local(&self, point: &[A::Field; N]) -> A {
+        self.origin.act(&self.basis.from_local(point))
+    }
+
+    fn _induced_basis(&self, _point: &A) -> [na::SVector<A::Field, N>; N] {
+        A::VectorSpace::_induced_basis(&self.basis.0)
+    }
+}
+
+pub struct OrthonormalAffineFrame<
+    const N: usize,
+    A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>,
+> {
+    pub origin: A,
+    pub basis: OrthonormalBasis<N, A::VectorSpace>,
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>>
+    OrthonormalAffineFrame<N, A>
+{
+    pub fn new(origin: A, basis: OrthonormalBasis<N, A::VectorSpace>) -> Self {
+        OrthonormalAffineFrame { origin, basis }
+    }
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Into<AffineFrame<N, A>>
+    for OrthonormalAffineFrame<N, A>
+{
+    fn into(self) -> AffineFrame<N, A> {
+        AffineFrame {
+            origin: self.origin,
+            basis: self.basis.into(),
+        }
+    }
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>>
+    Into<OrthogonalAffineFrame<N, A>> for OrthonormalAffineFrame<N, A>
+{
+    fn into(self) -> OrthogonalAffineFrame<N, A> {
+        OrthogonalAffineFrame {
+            origin: self.origin,
+            basis: self.basis.into(),
+        }
+    }
+}
+
+// generic_const_exprs pls...
+// impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Manifold<{ N + N * (N - 1) / 2 }> for OrthonormalAffineFrame<N, A> {
+//    type Field = A::Field;
+// }
+impl<A: AffineSpace<1, VectorSpace: InnerProductSpace<1>>> Manifold<1>
+    for OrthonormalAffineFrame<1, A>
+{
+    type Field = A::Field;
+}
+impl<A: AffineSpace<2, VectorSpace: InnerProductSpace<2>>> Manifold<3>
+    for OrthonormalAffineFrame<2, A>
+{
+    type Field = A::Field;
+}
+impl<A: AffineSpace<3, VectorSpace: InnerProductSpace<3>>> Manifold<6>
+    for OrthonormalAffineFrame<3, A>
+{
+    type Field = A::Field;
+}
+
+impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Chart<N, A>
+    for OrthonormalAffineFrame<N, A>
+{
+    type InducedVectorField = AffineVectorField<N, A>;
+
+    fn to_local(&self, point: &A) -> [A::Field; N] {
+        self.basis.to_local(&point.difference(&self.origin))
+    }
+
+    fn from_local(&self, components: &[A::Field; N]) -> A {
+        self.origin.act(&self.basis.from_local(components))
+    }
+
+    fn _induced_basis(&self, _point: &A) -> [na::SVector<A::Field, N>; N] {
+        A::VectorSpace::_induced_basis(&self.basis.0.0)
+    }
+}
+
+// Linear Topological Space
 
 pub trait LinearSpace<const N: usize>: AffineSpace<N, VectorSpace = Self> {
     type DualSpace: LinearSpace<N, DualSpace = Self, Field = <Self as Manifold<N>>::Field>;
@@ -73,15 +219,33 @@ pub trait LinearSpace<const N: usize>: AffineSpace<N, VectorSpace = Self> {
     fn pair_with(&self, dual: &Self::DualSpace) -> <Self as Manifold<N>>::Field;
     fn dual_basis(basis: &[Self; N]) -> [Self::DualSpace; N];
 
-    fn add(&self, other: &Self) -> Self {
-        self.translate(other)
-    }
+    fn add(&self, other: &Self) -> Self;
 
     fn _induced_basis(basis: &Basis<N, Self>) -> [na::SVector<<Self as Manifold<N>>::Field, N>; N];
 }
 
+pub trait InnerProductSpace<const N: usize>: LinearSpace<N> {
+    fn dot(&self, other: &Self) -> <Self as Manifold<N>>::Field;
+}
+
 pub trait Tensor<const N: usize, const R: usize, const S: usize> {
     type V: LinearSpace<N>;
+}
+
+pub struct Tensor1_1<const N: usize, V: LinearSpace<N>> {
+    pub raw: na::SMatrix<V::Field, N, N>,
+}
+
+impl<const N: usize, V: LinearSpace<N>> Tensor1_1<N, V> {
+    // fn apply(&self, vector: &V) -> V::DualSpace {
+    //     V::DualSpace {
+    //         raw: self.raw * vector.raw,
+    //     }
+    // }
+}
+
+impl<const N: usize, V: LinearSpace<N>> Tensor<N, 1, 1> for Tensor1_1<N, V> {
+    type V = V;
 }
 
 // struct Tensor2<const N: usize, K: Scalar> {
@@ -129,24 +293,34 @@ impl<const N: usize, V: LinearSpace<N>> Basis<N, V> {
     }
 }
 
-impl<const N: usize, V: LinearSpace<N>> Chart<N> for Basis<N, V> {
-    type M = V;
+// generic_const_exprs pls...
+// impl<const N: usize, V: LinearSpace<N>> Manifold<{ N * N }> for Basis<N, V> {
+//     type Field = V::Field;
+// }
+impl<V: LinearSpace<1>> Manifold<1> for Basis<1, V> {
+    type Field = V::Field;
+}
+impl<V: LinearSpace<2>> Manifold<4> for Basis<2, V> {
+    type Field = V::Field;
+}
+impl<V: LinearSpace<3>> Manifold<9> for Basis<3, V> {
+    type Field = V::Field;
+}
+
+impl<const N: usize, V: LinearSpace<N>> Chart<N, V> for Basis<N, V> {
     type InducedVectorField = ZeroVectorField<N, V>;
 
-    fn to_local(&self, point: &Self::M) -> [<Self::M as Manifold<N>>::Field; N] {
+    fn to_local(&self, point: &V) -> [V::Field; N] {
         std::array::from_fn(|i| self.dual_basis[i].pair_with(point))
     }
 
-    fn from_local(&self, components: &[<Self::M as Manifold<N>>::Field; N]) -> Self::M {
+    fn from_local(&self, components: &[V::Field; N]) -> V {
         components
             .iter()
             .enumerate()
             .fold(V::zero(), |v, (i, c)| v.add(&self.basis[i].scale(*c)))
     }
-    fn _induced_basis(
-        &self,
-        _point: &Self::M,
-    ) -> [nalgebra::SVector<<Self::M as Manifold<N>>::Field, N>; N] {
+    fn _induced_basis(&self, _point: &V) -> [nalgebra::SVector<V::Field, N>; N] {
         V::_induced_basis(self)
     }
 }
@@ -159,26 +333,141 @@ impl<const N: usize, V: LinearSpace<N>> std::ops::Index<usize> for Basis<N, V> {
     }
 }
 
-struct OrthogonalBasis<const N: usize, V: LinearSpace<N>>(Basis<N, V>);
+pub struct OrthogonalBasis<const N: usize, V: InnerProductSpace<N>>(Basis<N, V>);
 
-impl<const N: usize, V: LinearSpace<N>> Deref for OrthogonalBasis<N, V> {
-    type Target = Basis<N, V>;
+impl<const N: usize, V: InnerProductSpace<N>> OrthogonalBasis<N, V> {
+    pub fn new(vectors: [V; N]) -> Self {
+        let duals = V::dual_basis(&vectors);
+        OrthogonalBasis(Basis::new_with_dual(vectors, duals))
+    }
+}
 
-    fn deref(&self) -> &Self::Target {
+// generic_const_exprs pls...
+// impl<const N: usize, V: InnerProductSpace<N>> Manifold<{ N * (N + 1) / 2 }> for OrthogonalBasis<N, V> {
+//    type Field = V::Field;
+// }
+impl<V: InnerProductSpace<1>> Manifold<1> for OrthogonalBasis<1, V> {
+    type Field = V::Field;
+}
+impl<V: InnerProductSpace<2>> Manifold<3> for OrthogonalBasis<2, V> {
+    type Field = V::Field;
+}
+impl<V: InnerProductSpace<3>> Manifold<6> for OrthogonalBasis<3, V> {
+    type Field = V::Field;
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> Chart<N, V> for OrthogonalBasis<N, V> {
+    type InducedVectorField = ZeroVectorField<N, V>;
+
+    fn to_local(&self, point: &V) -> [V::Field; N] {
+        self.0.to_local(point)
+    }
+
+    fn from_local(&self, components: &[V::Field; N]) -> V {
+        self.0.from_local(components)
+    }
+
+    fn _induced_basis(&self, _point: &V) -> [na::SVector<V::Field, N>; N] {
+        V::_induced_basis(&self.0)
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> std::ops::Index<usize> for OrthogonalBasis<N, V> {
+    type Output = V;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0.basis[index]
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> Into<Basis<N, V>> for OrthogonalBasis<N, V> {
+    fn into(self) -> Basis<N, V> {
+        self.0
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> AsRef<Basis<N, V>> for OrthogonalBasis<N, V> {
+    fn as_ref(&self) -> &Basis<N, V> {
         &self.0
     }
 }
 
-impl<const N: usize, V: LinearSpace<N>> DerefMut for OrthogonalBasis<N, V> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+pub struct OrthonormalBasis<const N: usize, V: InnerProductSpace<N>>(OrthogonalBasis<N, V>);
+
+impl<const N: usize, V: InnerProductSpace<N>> OrthonormalBasis<N, V> {
+    pub fn new(vectors: [V; N]) -> Self {
+        let duals = V::dual_basis(&vectors);
+        OrthonormalBasis(OrthogonalBasis(Basis::new_with_dual(vectors, duals)))
+    }
+
+    pub fn basis(&self) -> &[V; N] {
+        &self.0.0.basis
     }
 }
 
-impl<const N: usize, V: LinearSpace<N>> OrthogonalBasis<N, V> {
-    pub fn new(vectors: [V; N]) -> Self {
-        let duals = V::dual_basis(&vectors);
-        OrthogonalBasis(Basis::new_with_dual(vectors, duals))
+// generic_const_exprs pls...
+// impl<const N: usize, V: InnerProductSpace<N>> Manifold<{ N * (N - 1) / 2 }> for OrthonormalBasis<N, V> {
+//     type Field = V::Field;
+// }
+impl<V: InnerProductSpace<1>> Manifold<1> for OrthonormalBasis<1, V> {
+    type Field = V::Field;
+}
+impl<V: InnerProductSpace<2>> Manifold<2> for OrthonormalBasis<2, V> {
+    type Field = V::Field;
+}
+impl<V: InnerProductSpace<3>> Manifold<3> for OrthonormalBasis<3, V> {
+    type Field = V::Field;
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> Chart<N, V> for OrthonormalBasis<N, V> {
+    type InducedVectorField = ZeroVectorField<N, V>;
+
+    fn to_local(&self, point: &V) -> [V::Field; N] {
+        self.0.to_local(point)
+    }
+
+    fn from_local(&self, components: &[V::Field; N]) -> V {
+        self.0.from_local(components)
+    }
+
+    fn _induced_basis(&self, _point: &V) -> [na::SVector<V::Field, N>; N] {
+        V::_induced_basis(&self.0.0)
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> std::ops::Index<usize> for OrthonormalBasis<N, V> {
+    type Output = V;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0.0.basis[index]
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> Into<Basis<N, V>> for OrthonormalBasis<N, V> {
+    fn into(self) -> Basis<N, V> {
+        self.0.0
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> Into<OrthogonalBasis<N, V>>
+    for OrthonormalBasis<N, V>
+{
+    fn into(self) -> OrthogonalBasis<N, V> {
+        self.0
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> AsRef<Basis<N, V>> for OrthonormalBasis<N, V> {
+    fn as_ref(&self) -> &Basis<N, V> {
+        &self.0.0
+    }
+}
+
+impl<const N: usize, V: InnerProductSpace<N>> AsRef<OrthogonalBasis<N, V>>
+    for OrthonormalBasis<N, V>
+{
+    fn as_ref(&self) -> &OrthogonalBasis<N, V> {
+        &self.0
     }
 }
 
@@ -186,13 +475,6 @@ macro_rules! define_vector_and_covector {
     ($vector_name:ident, $covector_name:ident) => {
         define_vector!($vector_name, $covector_name);
         define_vector!($covector_name, $vector_name);
-    };
-}
-
-macro_rules! impl_vector_and_covector {
-    ($vector_name:ident, $covector_name:ident) => {
-        impl_vector!($vector_name, $covector_name);
-        impl_vector!($covector_name, $vector_name);
     };
 }
 
@@ -213,20 +495,39 @@ macro_rules! impl_vector {
             type Field = K;
         }
 
-        impl<const N: usize, K: Scalar> AffineSpace<N> for $vector_name<N, K> {
-            type VectorSpace = Self;
+        impl<const N: usize, K: Scalar> LieGroup<N> for $vector_name<N, K> {
+            fn identity() -> Self {
+                Self {
+                    raw: na::SVector::zeros(),
+                }
+            }
 
-            fn translate(&self, other: &Self) -> Self {
+            fn multiply(&self, other: &Self) -> Self {
+                Self {
+                    raw: self.raw + other.raw,
+                }
+            }
+            fn inverse(&self) -> Self {
+                Self { raw: -self.raw }
+            }
+        }
+
+        impl<const N: usize, K: Scalar> Torsor<N, Self> for $vector_name<N, K> {
+            fn act(&self, other: &Self) -> Self {
                 Self {
                     raw: self.raw + other.raw,
                 }
             }
 
-            fn difference(&self, other: &Self) -> Self::VectorSpace {
+            fn difference(&self, other: &Self) -> Self {
                 Self {
                     raw: self.raw - other.raw,
                 }
             }
+        }
+
+        impl<const N: usize, K: Scalar> AffineSpace<N> for $vector_name<N, K> {
+            type VectorSpace = Self;
         }
 
         impl<const N: usize, K: Scalar> LinearSpace<N> for $vector_name<N, K> {

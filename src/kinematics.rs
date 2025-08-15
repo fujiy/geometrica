@@ -1,46 +1,56 @@
 // use crate::manifold::{LieGroup, Manifold, TangentBundle, TangentVector};
 use crate::manifold::*;
 
-pub type Kinematics<const N: usize, M> = TangentBundle<N, M>;
-
-impl<const N: usize, M: Manifold<N>> Kinematics<N, M> {
-    pub fn with_velocity<F, R>(&self, f: F) -> R
-    where
-        F: for<'point> FnOnce(TangentVector<'point, N, M>) -> R,
-    {
-        self.with_vector(f)
-    }
-}
-
-pub struct LieGroupKinematics<const N: usize, G: LieGroup<N>> {
-    pub point: G,
-    pub velocity: G::LieAlgebra,
-}
-
-impl<const N: usize, G: LieGroup<N>> LieGroupKinematics<N, G> {
-    pub fn new(point: G, velocity: G::LieAlgebra) -> Self {
-        Self { point, velocity }
-    }
-
-    pub fn zero() -> Self {
-        Self {
-            point: G::identity(),
-            velocity: G::LieAlgebra::zero(),
-        }
-    }
-}
-
-// impl<const N: usize, G: LieGroup<N>> LieGroupKinematics<N, G> {
-//     pub fn transform<const D: usize, C>(&self, chart: &C) -> C::M
-//     where
-//         C: Chart<N, M = G>,
-//         G: ChartTransform<N, D, C>,
-//     {
-//         chart.from_local(&self.point.to_local())
-//     }
+// pub struct Velocity<'a, const D: usize, G: LieGroup<D>> {
+//     position: &'a G,
+//     velocity: &'a LieAlgebra<D, G>,
 // }
 
-pub struct MovingChart<const N: usize, C: Chart<N>> {
-    pub chart: C,
-    pub velocity: C::InducedVectorField,
+pub trait HasVelocity {
+    type Velocity;
+}
+pub trait HasAcceleration {
+    type Acceleration;
+}
+
+pub struct Kinematics<const D: usize, M: Torsor<D, G>, G: LieGroup<D>> {
+    pub point: M,
+    action: G,
+    pub velocity: LieAlgebra<D, G>,
+}
+
+impl<const D: usize, M: Torsor<D, G>, G: LieGroup<D>> HasVelocity for Kinematics<D, M, G> {
+    type Velocity = LieAlgebra<D, G>;
+}
+
+impl<const D: usize, G: LieGroup<D>, M: Torsor<D, G>> Kinematics<D, M, G> {
+    pub fn new(point: M, velocity: LieAlgebra<D, G>) -> Self {
+        Self {
+            point: point,
+            action: G::identity(),
+            velocity,
+        }
+    }
+
+    pub fn stationary(point: M) -> Self {
+        Self {
+            point: point,
+            action: G::identity(),
+            velocity: <Self as HasVelocity>::Velocity::zero(),
+        }
+    }
+
+    // pub fn velocity_from_local<const N: usize, Q: Torsor<N, H>, H: LieGroup<N>>(
+    //     &self,
+    //     components: &[Q::Field; N],
+    // ) -> Kinematics<N, Q, H>
+    // where
+    //     M: Chart<N, Q>,
+    // {
+    //     Kinematics {
+    //         point: self.point.from_local(components),
+    //         action: self.action.clone(),
+    //         velocity: LieAlgebra::<N, H>::zero(),
+    //     }
+    // }
 }

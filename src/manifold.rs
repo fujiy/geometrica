@@ -69,22 +69,49 @@ impl<'point, const N: usize, M: Manifold<N>> Manifold<N> for TangentVector<'poin
     type Field = M::Field;
 }
 
-impl<'point, const N: usize, M: Manifold<N>> AffineSpace<N> for TangentVector<'point, N, M> {
-    type VectorSpace = Self;
+impl<'point, const N: usize, M: Manifold<N>> LieGroup<N> for TangentVector<'point, N, M> {
+    fn identity() -> Self {
+        TangentVector {
+            raw: na::SVector::zeros(),
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
 
-    fn translate(&self, other: &Self::VectorSpace) -> Self {
+    fn multiply(&self, other: &Self) -> Self {
         TangentVector {
             raw: self.raw + other.raw,
             _marker: InvariantLifetime(PhantomData),
         }
     }
 
-    fn difference(&self, other: &Self) -> Self::VectorSpace {
+    fn inverse(&self) -> Self {
+        TangentVector {
+            raw: -self.raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
+}
+
+impl<'point, const N: usize, M: Manifold<N>> Torsor<N, TangentVector<'point, N, M>>
+    for TangentVector<'point, N, M>
+{
+    fn act(&self, group_element: &Self) -> Self {
+        TangentVector {
+            raw: self.raw + group_element.raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
+
+    fn difference(&self, other: &Self) -> Self {
         TangentVector {
             raw: self.raw - other.raw,
             _marker: InvariantLifetime(PhantomData),
         }
     }
+}
+
+impl<'point, const N: usize, M: Manifold<N>> AffineSpace<N> for TangentVector<'point, N, M> {
+    type VectorSpace = Self;
 }
 
 impl<'point, const N: usize, M: Manifold<N>> LinearSpace<N> for TangentVector<'point, N, M> {
@@ -118,6 +145,13 @@ impl<'point, const N: usize, M: Manifold<N>> LinearSpace<N> for TangentVector<'p
         })
     }
 
+    fn add(&self, other: &Self) -> Self {
+        TangentVector {
+            raw: self.raw + other.raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
+
     fn _induced_basis(
         basis: &Basis<N, Self>,
     ) -> [nalgebra::SVector<<Self as Manifold<N>>::Field, N>; N] {
@@ -138,22 +172,49 @@ impl<'point, const N: usize, M: Manifold<N>> Manifold<N> for CotangentVector<'po
     type Field = M::Field;
 }
 
-impl<'point, const N: usize, M: Manifold<N>> AffineSpace<N> for CotangentVector<'point, N, M> {
-    type VectorSpace = Self;
+impl<'point, const N: usize, M: Manifold<N>> LieGroup<N> for CotangentVector<'point, N, M> {
+    fn identity() -> Self {
+        CotangentVector {
+            raw: na::SVector::zeros(),
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
 
-    fn translate(&self, other: &Self::VectorSpace) -> Self {
+    fn multiply(&self, other: &Self) -> Self {
         CotangentVector {
             raw: self.raw + other.raw,
             _marker: InvariantLifetime(PhantomData),
         }
     }
 
-    fn difference(&self, other: &Self) -> Self::VectorSpace {
+    fn inverse(&self) -> Self {
+        CotangentVector {
+            raw: -self.raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
+}
+
+impl<'point, const N: usize, M: Manifold<N>> Torsor<N, CotangentVector<'point, N, M>>
+    for CotangentVector<'point, N, M>
+{
+    fn act(&self, group_element: &Self) -> Self {
+        CotangentVector {
+            raw: self.raw + group_element.raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
+    }
+
+    fn difference(&self, other: &Self) -> Self {
         CotangentVector {
             raw: self.raw - other.raw,
             _marker: InvariantLifetime(PhantomData),
         }
     }
+}
+
+impl<'point, const N: usize, M: Manifold<N>> AffineSpace<N> for CotangentVector<'point, N, M> {
+    type VectorSpace = Self;
 }
 
 impl<'point, const N: usize, M: Manifold<N>> LinearSpace<N> for CotangentVector<'point, N, M> {
@@ -253,25 +314,21 @@ impl<const N: usize, M: Manifold<N>> CovectorField<N> for ZeroCovectorField<N, M
     }
 }
 
-pub trait Chart<const N: usize> {
-    type M: Manifold<N>;
-    type InducedVectorField: VectorField<N, M = Self::M>;
+pub trait Chart<const N: usize, M: Manifold<N>> {
+    type InducedVectorField: VectorField<N, M = M>;
 
-    fn to_local(&self, point: &Self::M) -> [<Self::M as Manifold<N>>::Field; N];
-    fn from_local(&self, components: &[<Self::M as Manifold<N>>::Field; N]) -> Self::M;
+    fn to_local(&self, point: &M) -> [M::Field; N];
+    fn from_local(&self, components: &[M::Field; N]) -> M;
 
-    fn _induced_basis(
-        &self,
-        point: &Self::M,
-    ) -> [na::SVector<<Self::M as Manifold<N>>::Field, N>; N];
+    fn _induced_basis(&self, point: &M) -> [na::SVector<M::Field, N>; N];
 
     fn from_local_vector(
         &self,
-        point: Self::M,
-        vector_components: &[<Self::M as Manifold<N>>::Field; N],
-    ) -> TangentBundle<N, Self::M> {
+        point: M,
+        vector_components: &[M::Field; N],
+    ) -> TangentBundle<N, M> {
         let basis_raw = self._induced_basis(&point);
-        let basis: Basis<N, TangentVector<'_, N, Self::M>> =
+        let basis: Basis<N, TangentVector<'_, N, M>> =
             Basis::new(std::array::from_fn(|i| TangentVector {
                 raw: basis_raw[i],
                 _marker: InvariantLifetime(PhantomData),
@@ -283,13 +340,13 @@ pub trait Chart<const N: usize> {
         }
     }
 
-    fn with_local_vector<F, R>(&self, point_and_vector: &TangentBundle<N, Self::M>, f: F) -> R
+    fn with_local_vector<F, R>(&self, point_and_vector: &TangentBundle<N, M>, f: F) -> R
     where
-        F: for<'point> FnOnce(&'point [<Self::M as Manifold<N>>::Field; N]) -> R,
+        F: for<'point> FnOnce(&'point [M::Field; N]) -> R,
     {
         point_and_vector.with_vector(|local| {
             let basis_raw = self._induced_basis(&point_and_vector.point);
-            let basis: Basis<N, TangentVector<'_, N, Self::M>> =
+            let basis: Basis<N, TangentVector<'_, N, M>> =
                 Basis::new(std::array::from_fn(|i| TangentVector {
                     raw: basis_raw[i],
                     _marker: InvariantLifetime(PhantomData),
@@ -311,55 +368,45 @@ pub trait Chart<const N: usize> {
 }
 
 pub trait LieGroup<const N: usize>: Manifold<N> {
-    type LieAlgebra: LinearSpace<N>;
-
     fn identity() -> Self;
     fn multiply(&self, other: &Self) -> Self;
     fn inverse(&self) -> Self;
 }
 
-pub trait GroupAction<const N: usize, const D: usize, M: Manifold<N>>: LieGroup<D> {
-    fn act_on(&self, point: &M) -> M;
+pub struct LieAlgebra<const N: usize, G: LieGroup<N>> {
+    raw: na::SVector<G::Field, N>,
 }
 
-pub trait ChartTransform<const N: usize, const D: usize, C: Chart<N>> {
-    type Transformed: Chart<N, M = C::M>;
-
-    fn transform(&self, chart: &C) -> Self::Transformed;
-    // fn between(chart: &C, transformed: &Self::Transformed) -> Self;
+impl<const N: usize, G: LieGroup<N>> LieAlgebra<N, G> {
+    pub fn zero() -> Self {
+        LieAlgebra {
+            raw: na::SVector::zeros(),
+        }
+    }
 }
 
-// pub struct TransformedChart<
-//     'a,
-//     const N: usize,
-//     const D: usize,
-//     C: Chart<N> + ?Sized,
-//     G: GroupAction<N, D, C::M> + Sized,
-// > {
-//     pub original_chart: &'a C,
-//     pub transformation: G,
+pub struct LieAlgebraDual<const N: usize, G: LieGroup<N>> {
+    raw: na::SVector<G::Field, N>,
+}
+
+pub trait Torsor<const N: usize, G: LieGroup<N>>: Manifold<N> {
+    fn act(&self, group_element: &G) -> Self;
+    fn difference(&self, other: &Self) -> G;
+}
+
+// pub trait GroupAction<const N: usize, const D: usize, M: Manifold<N>>: LieGroup<D> {
+//     fn act_on(&self, point: &M) -> M;
 // }
 
-// impl<'a, const N: usize, const D: usize, C: Chart<N>, G: GroupAction<N, D, C::M>> Chart<N>
-//     for TransformedChart<'a, N, D, C, G>
-// {
-//     type M = C::M;
-//     type InducedVectorField = C::InducedVectorField;
+// pub trait ChartTransformation<const N: usize, const D: usize, C: Chart<N>> {
+//     type Transformed: Chart<N, M = C::M>;
 
-//     fn to_local(&self, point: &Self::M) -> [<Self::M as Manifold<N>>::Field; N] {
-//         self.original_chart
-//             .to_local(&self.transformation.act_on(point))
-//     }
+//     fn transform(&self, chart: &C) -> Self::Transformed;
+//     // fn between(chart: &C, transformed: &Self::Transformed) -> Self;
+// }
 
-//     fn from_local(&self, components: &[<Self::M as Manifold<N>>::Field; N]) -> Self::M {
-//         let transformed_point = self.original_chart.from_local(components);
-//         self.transformation.act_on(&transformed_point)
-//     }
-//     fn _induced_basis(
-//         &self,
-//         point: &Self::M,
-//     ) -> [nalgebra::SVector<<Self::M as Manifold<N>>::Field, N>; N] {
-//         self.original_chart
-//             ._induced_basis(&self.transformation.act_on(point))
-//     }
+// pub trait ChartDifference<const N: usize, const D: usize, C: Chart<N>> {
+//     type Other: Chart<N, M = C::M>;
+
+//     fn difference(chart: &C, other: &Self::Other) -> Self;
 // }

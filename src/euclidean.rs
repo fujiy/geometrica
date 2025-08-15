@@ -1,11 +1,20 @@
 use nalgebra as na;
 
-pub use crate::linear_space::{AffineFrame, AffineSpace, Basis, LinearSpace};
-pub use crate::manifold::{Chart, ChartTransform, GroupAction, LieGroup, Manifold, Scalar};
+pub use crate::linear_space::{
+    AffineFrame, AffineSpace, Basis, InnerProductSpace, LinearSpace, OrthogonalAffineFrame,
+    OrthogonalBasis, OrthonormalAffineFrame, OrthonormalBasis,
+};
+pub use crate::manifold::{Chart, LieGroup, Manifold, Scalar, Torsor};
 
 // Vector space associated with Euclidean space
 
 define_vector_and_covector!(Vector, Covector);
+
+impl<const N: usize, K: Scalar> InnerProductSpace<N> for Vector<N, K> {
+    fn dot(&self, other: &Self) -> <Self as Manifold<N>>::Field {
+        self.raw.dot(&other.raw)
+    }
+}
 
 // Euclidean space
 
@@ -15,17 +24,17 @@ pub struct EuclideanSpace<const N: usize, K = f64> {
 }
 
 impl<const N: usize, K: Scalar> EuclideanSpace<N, K> {
-    pub fn reference_frame() -> AffineFrame<N, Self> {
-        AffineFrame {
-            origin: EuclideanSpace {
+    pub fn reference_frame() -> OrthonormalAffineFrame<N, Self> {
+        OrthonormalAffineFrame::new(
+            EuclideanSpace {
                 raw: na::SVector::from_element(K::zero()),
             },
-            basis: Basis::new(std::array::from_fn(|i| {
+            OrthonormalBasis::new(std::array::from_fn(|i| {
                 let mut repr = na::SVector::from_element(K::zero());
                 repr[i] = K::one();
                 Vector { raw: repr }
             })),
-        }
+        )
     }
 }
 
@@ -33,20 +42,22 @@ impl<const N: usize, K: Scalar> Manifold<N> for EuclideanSpace<N, K> {
     type Field = K;
 }
 
-impl<const N: usize, K: Scalar> AffineSpace<N> for EuclideanSpace<N, K> {
-    type VectorSpace = Vector<N, K>;
-
-    fn translate(&self, other: &Self::VectorSpace) -> Self {
+impl<const N: usize, K: Scalar> Torsor<N, Vector<N, K>> for EuclideanSpace<N, K> {
+    fn act(&self, group_element: &Vector<N, K>) -> Self {
         EuclideanSpace {
-            raw: self.raw + other.raw,
+            raw: self.raw + group_element.raw,
         }
     }
 
-    fn difference(&self, other: &Self) -> Self::VectorSpace {
+    fn difference(&self, other: &Self) -> Vector<N, K> {
         Vector {
             raw: self.raw - other.raw,
         }
     }
+}
+
+impl<const N: usize, K: Scalar> AffineSpace<N> for EuclideanSpace<N, K> {
+    type VectorSpace = Vector<N, K>;
 }
 
 pub struct PolarChart<const N: usize, K: Scalar = f64> {
@@ -57,57 +68,9 @@ pub struct PolarChart<const N: usize, K: Scalar = f64> {
 
 pub type Translation<const N: usize, K = f64> = Vector<N, K>;
 
-define_vector_and_covector!(LieAlgebraOfTranslation, LieAlgebraOfTranslationDual);
-
-impl<const N: usize, K: Scalar> LieGroup<N> for Translation<N, K> {
-    type LieAlgebra = LieAlgebraOfTranslation<N, K>;
-
-    fn identity() -> Self {
-        Translation {
-            raw: na::SVector::from_element(K::zero()),
-        }
-    }
-
-    fn multiply(&self, other: &Self) -> Self {
-        Translation {
-            raw: self.raw + other.raw,
-        }
-    }
-
-    fn inverse(&self) -> Self {
-        Translation { raw: -self.raw }
-    }
-}
-
-impl<const N: usize, K: Scalar, A: AffineSpace<N, VectorSpace = Self>> GroupAction<N, N, A>
-    for Translation<N, K>
-{
-    fn act_on(&self, point: &A) -> A {
-        point.translate(self)
-    }
-}
-
 // Rotation group or special orthogonal group SO(N)
 
-pub trait Rotation<const N: usize, K: Scalar = f64>:
-    Manifold<N> + LieGroup<N> + GroupAction<N, N, Vector<N, K>> + GroupAction<N, N, Covector<N, K>>
-{
-}
-
-impl<const N: usize, K: Scalar, R: Rotation<N, K>> ChartTransform<N, N, Basis<N, Vector<N, K>>>
-    for R
-{
-    type Transformed = Basis<N, Vector<N, K>>;
-
-    fn transform(&self, chart: &Basis<N, Vector<N, K>>) -> Self::Transformed {
-        Basis::new_with_dual(
-            std::array::from_fn(|i| self.act_on(&chart.basis[i])),
-            std::array::from_fn(|i| self.act_on(&chart.dual_basis[i])),
-        )
-    }
-}
-
-define_vector_and_covector!(LieAlgebraOfRotation, LieAlgebraOfRotationDual);
+pub trait Rotation<const N: usize, K: Scalar = f64>: Manifold<N> + LieGroup<N> {}
 
 pub struct Rotation2D<K: Scalar = f64> {
     raw: K,
@@ -123,13 +86,13 @@ impl<K: Scalar> Rotation2D<K> {
     }
 }
 
+impl<K: Scalar> Rotation<2, K> for Rotation2D<K> {}
+
 impl<K: Scalar> Manifold<2> for Rotation2D<K> {
     type Field = K;
 }
 
 impl<K: Scalar> LieGroup<2> for Rotation2D<K> {
-    type LieAlgebra = LieAlgebraOfRotation<2, K>;
-
     fn identity() -> Self {
         Rotation2D { raw: K::zero() }
     }
@@ -145,26 +108,18 @@ impl<K: Scalar> LieGroup<2> for Rotation2D<K> {
     }
 }
 
-impl<K: Scalar> GroupAction<2, 2, Vector<2, K>> for Rotation2D<K> {
-    fn act_on(&self, point: &Vector<2, K>) -> Vector<2, K> {
-        let rotation_matrix = na::Rotation2::new(self.raw);
-        Vector {
-            raw: rotation_matrix * point.raw,
-        }
+impl<K: Scalar> Torsor<2, Rotation2D<K>> for OrthonormalBasis<2, Vector<2, K>> {
+    fn act(&self, group_element: &Rotation2D<K>) -> Self {
+        let rotation_matrix = na::Rotation2::new(group_element.raw);
+        OrthonormalBasis::new(std::array::from_fn(|i| Vector {
+            raw: rotation_matrix * self[i].raw,
+        }))
+    }
+
+    fn difference(&self, other: &Self) -> Rotation2D<K> {
+        Rotation2D::from_angle(na::Rotation2::rotation_between(&self[0].raw, &other[0].raw).angle())
     }
 }
-
-impl<K: Scalar> GroupAction<2, 2, Covector<2, K>> for Rotation2D<K> {
-    fn act_on(&self, point: &Covector<2, K>) -> Covector<2, K> {
-        let rotation_matrix = na::Rotation2::new(-self.raw);
-        Covector {
-            raw: rotation_matrix * point.raw,
-        }
-    }
-}
-
-impl<K: Scalar> Rotation<2, K> for Rotation2D<K> {}
-
 pub struct Rotation3D<K: Scalar = f64> {
     raw: na::UnitQuaternion<K>,
 }
@@ -219,8 +174,6 @@ impl<K: Scalar> Manifold<3> for Rotation3D<K> {
 }
 
 impl<K: Scalar> LieGroup<3> for Rotation3D<K> {
-    type LieAlgebra = Vector<3, K>;
-
     fn identity() -> Self {
         Rotation3D {
             raw: na::UnitQuaternion::identity(),
@@ -240,18 +193,18 @@ impl<K: Scalar> LieGroup<3> for Rotation3D<K> {
     }
 }
 
-impl<K: Scalar> GroupAction<3, 3, Vector<3, K>> for Rotation3D<K> {
-    fn act_on(&self, point: &Vector<3, K>) -> Vector<3, K> {
-        Vector {
-            raw: self.raw * point.raw,
-        }
+impl<K: Scalar> Torsor<3, Rotation3D<K>> for OrthonormalBasis<3, Vector<3, K>> {
+    fn act(&self, group_element: &Rotation3D<K>) -> Self {
+        let rotation_matrix = group_element.raw.to_rotation_matrix();
+        OrthonormalBasis::new(std::array::from_fn(|i| Vector {
+            raw: rotation_matrix * self[i].raw,
+        }))
     }
-}
 
-impl<K: Scalar> GroupAction<3, 3, Covector<3, K>> for Rotation3D<K> {
-    fn act_on(&self, point: &Covector<3, K>) -> Covector<3, K> {
-        Covector {
-            raw: self.raw.inverse() * point.raw,
+    fn difference(&self, other: &Self) -> Rotation3D<K> {
+        Rotation3D {
+            raw: na::UnitQuaternion::rotation_between(&self[0].raw, &other[0].raw)
+                .expect("Rotation3D::difference failed"),
         }
     }
 }
@@ -277,20 +230,16 @@ pub trait Motion<const N: usize, K: Scalar = f64>: From<Translation<N, K>> {
     }
 }
 
-define_vector_and_covector!(LieAlgebraOfMotion, LieAlgebraOfMotionDual);
-
 pub struct Motion2D<K: Scalar = f64> {
     translation_raw: na::SVector<K, 2>,
     rotation_raw: K,
 }
 
-impl<K: Scalar> Manifold<4> for Motion2D<K> {
+impl<K: Scalar> Manifold<3> for Motion2D<K> {
     type Field = K;
 }
 
-impl<K: Scalar> LieGroup<4> for Motion2D<K> {
-    type LieAlgebra = LieAlgebraOfMotion<4, K>;
-
+impl<K: Scalar> LieGroup<3> for Motion2D<K> {
     fn identity() -> Self {
         Motion2D {
             translation_raw: na::SVector::from_element(K::zero()),
@@ -353,16 +302,22 @@ impl<K: Scalar> Motion<2, K> for Motion2D<K> {
     }
 }
 
-impl<K: Scalar> ChartTransform<2, 4, AffineFrame<2, EuclideanSpace<2, K>>> for Motion2D<K> {
-    type Transformed = AffineFrame<2, EuclideanSpace<2, K>>;
+impl<K: Scalar> Torsor<3, Motion2D<K>> for OrthonormalAffineFrame<2, EuclideanSpace<2, K>> {
+    fn act(&self, group_element: &Motion2D<K>) -> Self {
+        OrthonormalAffineFrame::new(
+            self.origin.act(&group_element.translation()),
+            self.basis.act(&group_element.rotation()),
+        )
+    }
 
-    fn transform(&self, chart: &AffineFrame<2, EuclideanSpace<2, K>>) -> Self::Transformed {
-        let new_origin = self.translation().act_on(&chart.origin);
-        let rotation = self.rotation();
-        let new_basis = std::array::from_fn(|i| rotation.act_on(&chart.basis.basis[i]));
-        Self::Transformed {
-            origin: new_origin,
-            basis: Basis::new(new_basis),
+    fn difference(&self, other: &Self) -> Motion2D<K> {
+        let translation = self.origin.difference(&other.origin);
+        let rotation = Rotation2D::from_angle(
+            na::Rotation2::rotation_between(&self.basis[0].raw, &other.basis[0].raw).angle(),
+        );
+        Motion2D {
+            translation_raw: translation.raw,
+            rotation_raw: rotation.raw,
         }
     }
 }
@@ -379,8 +334,6 @@ impl<K: Scalar> Manifold<6> for Motion3D<K> {
 }
 
 impl<K: Scalar> LieGroup<6> for Motion3D<K> {
-    type LieAlgebra = LieAlgebraOfMotion<6, K>;
-
     fn identity() -> Self {
         Motion3D {
             translation_raw: na::SVector::from_element(K::zero()),
@@ -441,16 +394,22 @@ impl<K: Scalar> Motion<3, K> for Motion3D<K> {
     }
 }
 
-impl<K: Scalar> ChartTransform<3, 6, AffineFrame<3, EuclideanSpace<3, K>>> for Motion3D<K> {
-    type Transformed = AffineFrame<3, EuclideanSpace<3, K>>;
-
-    fn transform(&self, chart: &AffineFrame<3, EuclideanSpace<3, K>>) -> Self::Transformed {
-        let new_origin = self.translation().act_on(&chart.origin);
-        let rotation = self.rotation();
-        let new_basis = std::array::from_fn(|i| rotation.act_on(&chart.basis.basis[i]));
-        Self::Transformed {
-            origin: new_origin,
-            basis: Basis::new(new_basis),
+impl<K: Scalar> Torsor<6, Motion3D<K>> for OrthonormalAffineFrame<3, EuclideanSpace<3, K>> {
+    fn act(&self, group_element: &Motion3D<K>) -> Self {
+        OrthonormalAffineFrame::new(
+            self.origin.act(&group_element.translation()),
+            self.basis.act(&group_element.rotation()),
+        )
+    }
+    fn difference(&self, other: &Self) -> Motion3D<K> {
+        let translation = self.origin.difference(&other.origin);
+        let rotation = Rotation3D {
+            raw: na::UnitQuaternion::rotation_between(&self.basis[0].raw, &other.basis[0].raw)
+                .expect("Motion3D::difference failed"),
+        };
+        Motion3D {
+            translation_raw: translation.raw,
+            rotation_raw: rotation.raw,
         }
     }
 }
