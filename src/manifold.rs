@@ -152,10 +152,14 @@ impl<'point, const N: usize, M: Manifold<N>> LinearSpace<N> for TangentVector<'p
         }
     }
 
-    fn _induced_basis(
-        basis: &Basis<N, Self>,
-    ) -> [nalgebra::SVector<<Self as Manifold<N>>::Field, N>; N] {
-        std::array::from_fn(|i| basis.basis[i].raw)
+    fn _get_raw(&self) -> &nalgebra::SVector<<Self as Manifold<N>>::Field, N> {
+        &self.raw
+    }
+    fn _from_raw(raw: nalgebra::SVector<<Self as Manifold<N>>::Field, N>) -> Self {
+        TangentVector {
+            raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
     }
 }
 
@@ -252,10 +256,14 @@ impl<'point, const N: usize, M: Manifold<N>> LinearSpace<N> for CotangentVector<
         })
     }
 
-    fn _induced_basis(
-        basis: &Basis<N, Self>,
-    ) -> [nalgebra::SVector<<Self as Manifold<N>>::Field, N>; N] {
-        std::array::from_fn(|i| basis.basis[i].raw)
+    fn _get_raw(&self) -> &nalgebra::SVector<M::Field, N> {
+        &self.raw
+    }
+    fn _from_raw(raw: nalgebra::SVector<M::Field, N>) -> Self {
+        CotangentVector {
+            raw,
+            _marker: InvariantLifetime(PhantomData),
+        }
     }
 }
 

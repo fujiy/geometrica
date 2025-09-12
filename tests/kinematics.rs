@@ -1,43 +1,54 @@
+// use geometrica::affine_space::*;
 use geometrica::euclidean::*;
 use geometrica::kinematics::*;
 
-type BodyFrame3D<K> = OrthonormalAffineFrame<3, EuclideanSpace<3, K>>;
-type RigidBodyKinematics3D<K> = Kinematics<6, BodyFrame3D<K>, Motion3D<K>>;
-
-struct Value {
-    raw: f64,
-}
-struct HasRef<'a> {
-    value: &'a Value,
-}
-
-impl HasRef<'_> {
-    fn freeze(&self) -> f64 {
-        self.value.raw
-    }
-}
-
 #[test]
-fn test_rigid_body_kinematics() {
-    let reference = EuclideanSpace::<3>::reference_frame();
-    let body = RigidBodyKinematics3D::<f64>::stationary(reference);
+fn test_particle_motion() {
+    struct Origin;
+    struct Particle;
+    impl EuclideanSpace<3> for Origin {}
+    impl EuclideanSpace<3> for Particle {}
 
-    // let vel: RigidBodyKinematics3D<f64>::Velocity = body.velocity;
+    struct Reference;
+    impl OrthonormalFrame<3> for Reference {}
 
-    let mut value: Value = Value { raw: 0.0 };
+    type ParticleKinematics = Kinematics1<3, Vector<3>, Origin, Particle>;
 
-    let has_ref = HasRef { value: &value };
+    let mut particle = ParticleKinematics::zero();
 
-    // value.raw = 1.0;
+    let force: ForceOf<ParticleKinematics> = MomentumOf::<ParticleKinematics>::zero();
 
-    print!("Value: {}", has_ref.value.raw);
+    let frame = Kinematics0::<6, Motion3D<f64>, Reference>::zero();
 
-    let raw = has_ref.freeze();
-
-    value.raw = 2.0;
-
-    println!("Raw value: {}", raw);
-    println!("Value after freeze: {}", value.raw);
-
-    // let body = kinematics.transform(&reference);
+    // let particle = kinematics.transform(&reference);
 }
+
+// #[test]
+// fn test_rigid_body_rotation() {
+//     struct Body;
+
+//     type BodyFrame3D<K = f64> = OrthonormalBasis<3, Vector<3, K>>;
+//     type RigidBodyKinematics3D<K = f64> = Kinematics<3, BodyFrame3D<K>, Rotation3D<K>>;
+
+//     let reference = EuclideanSpace::<3>::reference_basis();
+//     let body = RigidBodyKinematics3D::stationary(reference);
+
+//     let force: ForceOf<RigidBodyKinematics3D> = MomentumOf::<RigidBodyKinematics3D>::zero();
+
+//     // let body = kinematics.transform(&reference);
+// }
+
+// #[test]
+// fn test_rigid_body_motion() {
+//     type BodyFrame3D<K = f64> = OrthonormalAffineFrame<3, EuclideanSpace<3, K>>;
+//     type RigidBodyKinematics3D<K = f64> = Kinematics<6, BodyFrame3D<K>, Motion3D<K>>;
+
+//     let reference = EuclideanSpace::<3>::reference_frame();
+//     let body = RigidBodyKinematics3D::stationary(reference);
+
+//     // let v: &VelocityOf<RigidBodyKinematics3D> = &body.velocity;
+
+//     // let motion = body.action;
+//     // let position = body.point;
+//     // let velocity = body.velocity;
+// }
