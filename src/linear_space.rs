@@ -208,71 +208,6 @@ impl<const N: usize, A: AffineSpace<N, VectorSpace: InnerProductSpace<N>>> Chart
     }
 }
 
-// Linear Topological Space
-
-pub trait LinearSpace<const N: usize>: AffineSpace<N, VectorSpace = Self> {
-    type DualSpace: LinearSpace<N, DualSpace = Self, Field = <Self as Manifold<N>>::Field>;
-
-    fn zero() -> Self;
-    fn scale(&self, scalar: <Self as Manifold<N>>::Field) -> Self;
-
-    fn pair_with(&self, dual: &Self::DualSpace) -> <Self as Manifold<N>>::Field;
-    fn dual_basis(basis: &[Self; N]) -> [Self::DualSpace; N];
-
-    fn add(&self, other: &Self) -> Self;
-
-    fn _induced_basis(basis: &Basis<N, Self>) -> [na::SVector<<Self as Manifold<N>>::Field, N>; N];
-}
-
-pub trait InnerProductSpace<const N: usize>: LinearSpace<N> {
-    fn dot(&self, other: &Self) -> <Self as Manifold<N>>::Field;
-}
-
-pub trait Tensor<const N: usize, const R: usize, const S: usize> {
-    type V: LinearSpace<N>;
-}
-
-pub struct Tensor1_1<const N: usize, V: LinearSpace<N>> {
-    pub raw: na::SMatrix<V::Field, N, N>,
-}
-
-impl<const N: usize, V: LinearSpace<N>> Tensor1_1<N, V> {
-    // fn apply(&self, vector: &V) -> V::DualSpace {
-    //     V::DualSpace {
-    //         raw: self.raw * vector.raw,
-    //     }
-    // }
-}
-
-impl<const N: usize, V: LinearSpace<N>> Tensor<N, 1, 1> for Tensor1_1<N, V> {
-    type V = V;
-}
-
-// struct Tensor2<const N: usize, K: Scalar> {
-//     raw: na::SMatrix<K, N, N>,
-// }
-
-// impl<const N: usize, K: Scalar> Tensor2<N, K> {
-//     fn from_columns(columns: [&Vector<N, K>; N]) -> Self {
-//         let raw = na::SMatrix::<K, N, N>::from_columns(&columns.map(|v| v.raw));
-//         Tensor2 {
-//             raw,
-//         }
-//     }
-
-//     fn inverse(&self) -> Self {
-//         Tensor2 {
-//             raw: self.raw.try_inverse().expect("Matrix is not invertible"),
-//         }
-//     }
-// }
-
-// impl<const N: usize, V: LinearSpace<N>> Tensor<N, 2, 0> for Tensor2<N, V> {
-//     type V = V;
-// }
-
-// Basis for Linear Space
-
 pub struct Basis<const N: usize, V: LinearSpace<N>> {
     pub basis: [V; N],
     pub dual_basis: [V::DualSpace; N], // inverse_matrix: OnceCell<Tensor2<N, V>>, // Cache for the inverse matrix
@@ -471,143 +406,125 @@ impl<const N: usize, V: InnerProductSpace<N>> AsRef<OrthogonalBasis<N, V>>
     }
 }
 
-macro_rules! define_vector_and_covector {
-    ($vector_name:ident, $covector_name:ident) => {
-        define_vector!($vector_name, $covector_name);
-        define_vector!($covector_name, $vector_name);
-    };
-}
+// macro_rules! impl_vector {
+//     ($vector_name:ident, $covector_name:ident) => {
+//         impl<const N: usize, K: Scalar> Manifold<N> for $vector_name<N, K> {
+//             type Field = K;
+//         }
 
-macro_rules! define_vector {
-    ($vector_name:ident, $covector_name:ident) => {
-        #[derive(Clone)]
-        pub struct $vector_name<const N: usize, K: Scalar = f64> {
-            pub raw: na::SVector<K, N>,
-        }
+//         impl<const N: usize, K: Scalar> LieGroup<N> for $vector_name<N, K> {
+//             fn identity() -> Self {
+//                 Self {
+//                     raw: na::SVector::zeros(),
+//                 }
+//             }
 
-        impl_vector!($vector_name, $covector_name);
-    };
-}
+//             fn multiply(&self, other: &Self) -> Self {
+//                 Self {
+//                     raw: self.raw + other.raw,
+//                 }
+//             }
+//             fn inverse(&self) -> Self {
+//                 Self { raw: -self.raw }
+//             }
+//         }
 
-macro_rules! impl_vector {
-    ($vector_name:ident, $covector_name:ident) => {
-        impl<const N: usize, K: Scalar> Manifold<N> for $vector_name<N, K> {
-            type Field = K;
-        }
+//         impl<const N: usize, K: Scalar> Torsor<N, Self> for $vector_name<N, K> {
+//             fn act(&self, other: &Self) -> Self {
+//                 Self {
+//                     raw: self.raw + other.raw,
+//                 }
+//             }
 
-        impl<const N: usize, K: Scalar> LieGroup<N> for $vector_name<N, K> {
-            fn identity() -> Self {
-                Self {
-                    raw: na::SVector::zeros(),
-                }
-            }
+//             fn difference(&self, other: &Self) -> Self {
+//                 Self {
+//                     raw: self.raw - other.raw,
+//                 }
+//             }
+//         }
 
-            fn multiply(&self, other: &Self) -> Self {
-                Self {
-                    raw: self.raw + other.raw,
-                }
-            }
-            fn inverse(&self) -> Self {
-                Self { raw: -self.raw }
-            }
-        }
+//         impl<const N: usize, K: Scalar> AffineSpace<N> for $vector_name<N, K> {
+//             type VectorSpace = Self;
+//         }
 
-        impl<const N: usize, K: Scalar> Torsor<N, Self> for $vector_name<N, K> {
-            fn act(&self, other: &Self) -> Self {
-                Self {
-                    raw: self.raw + other.raw,
-                }
-            }
+//         impl<const N: usize, K: Scalar> LinearSpace<N> for $vector_name<N, K> {
+//             type DualSpace = $covector_name<N, K>;
 
-            fn difference(&self, other: &Self) -> Self {
-                Self {
-                    raw: self.raw - other.raw,
-                }
-            }
-        }
+//             fn zero() -> Self {
+//                 Self {
+//                     raw: na::SVector::zeros(),
+//                 }
+//             }
 
-        impl<const N: usize, K: Scalar> AffineSpace<N> for $vector_name<N, K> {
-            type VectorSpace = Self;
-        }
+//             fn add(&self, other: &Self) -> Self {
+//                 Self {
+//                     raw: &self.raw + &other.raw,
+//                 }
+//             }
 
-        impl<const N: usize, K: Scalar> LinearSpace<N> for $vector_name<N, K> {
-            type DualSpace = $covector_name<N, K>;
+//             fn scale(&self, scalar: K) -> Self {
+//                 Self {
+//                     raw: &self.raw * scalar,
+//                 }
+//             }
 
-            fn zero() -> Self {
-                Self {
-                    raw: na::SVector::zeros(),
-                }
-            }
+//             fn pair_with(&self, dual: &Self::DualSpace) -> <Self as Manifold<N>>::Field {
+//                 self.raw.dot(&dual.raw)
+//             }
 
-            fn add(&self, other: &Self) -> Self {
-                Self {
-                    raw: &self.raw + &other.raw,
-                }
-            }
+//             fn dual_basis(basis: &[Self; N]) -> [Self::DualSpace; N] {
+//                 let raws: [na::SVector<K, N>; N] = std::array::from_fn(|i| basis[i].raw.clone());
+//                 let matrix = na::SMatrix::<K, N, N>::from_columns(&raws);
+//                 let inverse = matrix.try_inverse().expect("Basis is singular");
 
-            fn scale(&self, scalar: K) -> Self {
-                Self {
-                    raw: &self.raw * scalar,
-                }
-            }
+//                 let inverse_t = inverse.transpose();
+//                 std::array::from_fn(|i| $covector_name {
+//                     raw: inverse_t.column(i).into_owned(),
+//                 })
+//             }
 
-            fn pair_with(&self, dual: &Self::DualSpace) -> <Self as Manifold<N>>::Field {
-                self.raw.dot(&dual.raw)
-            }
+//             fn _induced_basis(basis: &Basis<N, Self>) -> [na::SVector<K, N>; N] {
+//                 std::array::from_fn(|i| basis.basis[i].raw)
+//             }
+//         }
 
-            fn dual_basis(basis: &[Self; N]) -> [Self::DualSpace; N] {
-                let raws: [na::SVector<K, N>; N] = std::array::from_fn(|i| basis[i].raw.clone());
-                let matrix = na::SMatrix::<K, N, N>::from_columns(&raws);
-                let inverse = matrix.try_inverse().expect("Basis is singular");
+//         impl<'a, const N: usize, K: Scalar> std::ops::Add<&'a $vector_name<N, K>>
+//             for &'a $vector_name<N, K>
+//         {
+//             type Output = $vector_name<N, K>;
 
-                let inverse_t = inverse.transpose();
-                std::array::from_fn(|i| $covector_name {
-                    raw: inverse_t.column(i).into_owned(),
-                })
-            }
+//             fn add(self, rhs: Self) -> Self::Output {
+//                 $vector_name {
+//                     raw: self.raw + rhs.raw,
+//                 }
+//             }
+//         }
+//         impl<'a, const N: usize, K: Scalar> std::ops::Sub<&'a $vector_name<N, K>>
+//             for &'a $vector_name<N, K>
+//         {
+//             type Output = $vector_name<N, K>;
 
-            fn _induced_basis(basis: &Basis<N, Self>) -> [na::SVector<K, N>; N] {
-                std::array::from_fn(|i| basis.basis[i].raw)
-            }
-        }
+//             fn sub(self, rhs: Self) -> Self::Output {
+//                 $vector_name {
+//                     raw: self.raw - rhs.raw,
+//                 }
+//             }
+//         }
+//         impl<'a, const N: usize, K: Scalar> std::ops::Neg for &'a $vector_name<N, K> {
+//             type Output = $vector_name<N, K>;
 
-        impl<'a, const N: usize, K: Scalar> std::ops::Add<&'a $vector_name<N, K>>
-            for &'a $vector_name<N, K>
-        {
-            type Output = $vector_name<N, K>;
+//             fn neg(self) -> Self::Output {
+//                 $vector_name { raw: -self.raw }
+//             }
+//         }
+//         impl<'a, const N: usize, K: Scalar> std::ops::Mul<K> for &'a $vector_name<N, K> {
+//             type Output = $vector_name<N, K>;
 
-            fn add(self, rhs: Self) -> Self::Output {
-                $vector_name {
-                    raw: self.raw + rhs.raw,
-                }
-            }
-        }
-        impl<'a, const N: usize, K: Scalar> std::ops::Sub<&'a $vector_name<N, K>>
-            for &'a $vector_name<N, K>
-        {
-            type Output = $vector_name<N, K>;
-
-            fn sub(self, rhs: Self) -> Self::Output {
-                $vector_name {
-                    raw: self.raw - rhs.raw,
-                }
-            }
-        }
-        impl<'a, const N: usize, K: Scalar> std::ops::Neg for &'a $vector_name<N, K> {
-            type Output = $vector_name<N, K>;
-
-            fn neg(self) -> Self::Output {
-                $vector_name { raw: -self.raw }
-            }
-        }
-        impl<'a, const N: usize, K: Scalar> std::ops::Mul<K> for &'a $vector_name<N, K> {
-            type Output = $vector_name<N, K>;
-
-            fn mul(self, scalar: K) -> Self::Output {
-                $vector_name {
-                    raw: self.raw * scalar,
-                }
-            }
-        }
-    };
-}
+//             fn mul(self, scalar: K) -> Self::Output {
+//                 $vector_name {
+//                     raw: self.raw * scalar,
+//                 }
+//             }
+//         }
+//     };
+// }
