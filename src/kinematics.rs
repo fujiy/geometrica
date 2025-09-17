@@ -1,5 +1,6 @@
 // use crate::manifold::{LieGroup, Manifold, TangentBundle, TangentVector};
-use crate::manifold::*;
+use crate::lie::{LieAlgebra, LieGroup, Torsor};
+use nalgebra::{DefaultAllocator, allocator::Allocator};
 
 // pub struct Velocity<'a, const D: usize, G: LieGroup<D>> {
 //     position: &'a G,
@@ -13,29 +14,32 @@ pub trait HasAcceleration {
     type Acceleration;
 }
 
-pub struct Kinematics<const D: usize, M: Torsor<D, G>, G: LieGroup<D>> {
-    pub point: M,
-    action: G,
-    pub velocity: LieAlgebra<D, G>,
+pub struct Kinematics<G: LieGroup>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
+    pub point: Torsor<G>,
+    pub velocity: LieAlgebra<G>,
 }
 
-impl<const D: usize, M: Torsor<D, G>, G: LieGroup<D>> HasVelocity for Kinematics<D, M, G> {
-    type Velocity = LieAlgebra<D, G>;
+impl<G: LieGroup> HasVelocity for Kinematics<G>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
+    type Velocity = LieAlgebra<G>;
 }
 
-impl<const D: usize, G: LieGroup<D>, M: Torsor<D, G>> Kinematics<D, M, G> {
-    pub fn new(point: M, velocity: LieAlgebra<D, G>) -> Self {
-        Self {
-            point: point,
-            action: G::identity(),
-            velocity,
-        }
+impl<G: LieGroup> Kinematics<G>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
+    pub fn new(point: Torsor<G>, velocity: LieAlgebra<G>) -> Self {
+        Self { point, velocity }
     }
 
-    pub fn stationary(point: M) -> Self {
+    pub fn stationary(point: Torsor<G>) -> Self {
         Self {
             point: point,
-            action: G::identity(),
             velocity: <Self as HasVelocity>::Velocity::zero(),
         }
     }

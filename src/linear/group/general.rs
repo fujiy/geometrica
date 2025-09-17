@@ -1,44 +1,74 @@
-use nalgebra as na;
+use nalgebra::DimName;
+use nalgebra::{DimMul, DimProd, OMatrix};
 
-use super::super::space::LinearSpace;
-use crate::lie::LieGroup;
+use crate::lie::{GroupAction, LieGroup};
+use crate::linear::space::{Allocator, DefaultAllocator, LinearSpace};
 use crate::manifold::Manifold;
 
-pub type GL<const N: usize, V> = GeneralLinearGroup<N, V>;
+pub type GL<V> = GeneralLinearGroup<V>;
 
-pub struct GeneralLinearGroup<const N: usize, V: LinearSpace<N>> {
-    matrix: na::SMatrix<V::Field, N, N>,
+pub struct GeneralLinearGroup<V: LinearSpace>
+where
+    DefaultAllocator: Allocator<V::Dim> + Allocator<V::Dim, V::Dim>,
+{
+    matrix: OMatrix<V::Field, V::Dim, V::Dim>,
 }
 
-macro_rules! impl_general_linear_group {
-    ($N:literal, $D:literal) => {
-        impl<V: LinearSpace<$N>> Manifold<$D> for GeneralLinearGroup<$N, V> {
-            type Field = V::Field;
-        }
-
-        impl<V: LinearSpace<$N>> LieGroup<$D> for GeneralLinearGroup<$N, V> {
-            fn identity() -> Self {
-                Self {
-                    matrix: na::SMatrix::<V::Field, $N, $N>::identity(),
-                }
-            }
-
-            fn multiply(&self, other: &Self) -> Self {
-                Self {
-                    matrix: self.matrix * other.matrix,
-                }
-            }
-
-            fn inverse(&self) -> Self {
-                Self {
-                    matrix: self.matrix.try_inverse().unwrap(),
-                }
-            }
-        }
-    };
+pub trait DimOfGL {
+    type Dim: DimName;
 }
 
-impl_general_linear_group!(1, 1);
-impl_general_linear_group!(2, 4);
-impl_general_linear_group!(3, 9);
-impl_general_linear_group!(4, 16);
+impl<N: DimName> DimOfGL for N
+where
+    N: DimMul<N>,
+    DimProd<N, N>: DimName,
+{
+    type Dim = DimProd<N, N>;
+}
+
+impl<V: LinearSpace> Manifold for GeneralLinearGroup<V>
+where
+    V::Dim: DimOfGL,
+    DefaultAllocator: Allocator<V::Dim> + Allocator<V::Dim, V::Dim>,
+{
+    type Field = V::Field;
+    type Dim = <V::Dim as DimOfGL>::Dim;
+}
+
+impl<V: LinearSpace> LieGroup for GeneralLinearGroup<V>
+where
+    V::Dim: DimOfGL,
+    DefaultAllocator: Allocator<V::Dim> + Allocator<V::Dim, V::Dim>,
+{
+    fn identity() -> Self {
+        Self {
+            matrix: OMatrix::<V::Field, V::Dim, V::Dim>::identity(),
+        }
+    }
+
+    fn multiply(&self, other: &Self) -> Self {
+        Self {
+            matrix: &self.matrix * &other.matrix,
+        }
+    }
+
+    fn inverse(&self) -> Self {
+        Self {
+            matrix: self
+                .matrix
+                .clone()
+                .try_inverse()
+                .expect("Matrix is not invertible."),
+        }
+    }
+}
+
+impl<V: LinearSpace> GroupAction<V> for GeneralLinearGroup<V>
+where
+    V::Dim: DimOfGL,
+    DefaultAllocator: Allocator<V::Dim> + Allocator<V::Dim, V::Dim>,
+{
+    fn act_on(&self, point: &V) -> V {
+        V::_from_raw(&self.matrix * point._get_raw())
+    }
+}

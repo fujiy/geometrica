@@ -1,36 +1,58 @@
-use nalgebra as na;
-
 use crate::manifold::Manifold;
+use nalgebra::OVector;
+pub use nalgebra::{DefaultAllocator, allocator::Allocator};
 
-pub trait LieGroup<const N: usize>: Manifold<N> {
+pub trait LieGroup: Manifold {
     fn identity() -> Self;
     fn multiply(&self, other: &Self) -> Self;
     fn inverse(&self) -> Self;
 }
 
-pub struct LieAlgebra<const N: usize, G: LieGroup<N>> {
-    raw: na::SVector<G::Field, N>,
+pub struct LieAlgebra<G: LieGroup>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
+    raw: OVector<G::Field, G::Dim>,
 }
 
-impl<const N: usize, G: LieGroup<N>> LieAlgebra<N, G> {
+impl<G: LieGroup> LieAlgebra<G>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
     pub fn zero() -> Self {
         LieAlgebra {
-            raw: na::SVector::zeros(),
+            raw: OVector::zeros(),
         }
     }
 }
 
-pub struct LieAlgebraDual<const N: usize, G: LieGroup<N>> {
-    raw: na::SVector<G::Field, N>,
+pub struct LieAlgebraDual<G: LieGroup>
+where
+    DefaultAllocator: Allocator<G::Dim>,
+{
+    raw: OVector<G::Field, G::Dim>,
 }
 
-pub struct Torsor<const N: usize, G: LieGroup<N>> {
-    from_origin: G,
+pub struct Torsor<G: LieGroup> {
+    pub _from_origin: G,
 }
 
-// pub trait GroupAction<const N: usize, const D: usize, M: Manifold<N>>: LieGroup<D> {
-//     fn act_on(&self, point: &M) -> M;
-// }
+impl<G: LieGroup> Manifold for Torsor<G> {
+    type Field = G::Field;
+    type Dim = G::Dim;
+}
+
+pub trait GroupAction<M: Manifold>: LieGroup {
+    fn act_on(&self, point: &M) -> M;
+}
+
+impl<G: LieGroup> GroupAction<Torsor<G>> for G {
+    fn act_on(&self, point: &Torsor<G>) -> Torsor<G> {
+        Torsor {
+            _from_origin: self.multiply(&point._from_origin),
+        }
+    }
+}
 
 // pub trait ChartTransformation<const N: usize, const D: usize, C: Chart<N>> {
 //     type Transformed: Chart<N, M = C::M>;

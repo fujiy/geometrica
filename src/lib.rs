@@ -4,7 +4,7 @@
 pub mod astrodynamics;
 pub mod euclidean;
 pub mod kinematics;
-pub mod linear_space;
+// pub mod linear_space;
 pub mod manifold;
 
 pub mod lie;

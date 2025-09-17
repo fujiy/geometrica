@@ -1,116 +1,113 @@
-use nalgebra as na;
+use nalgebra::{
+    DimAdd, DimDiff, DimDiv, DimMul, DimName, DimProd, DimQuot, DimSub, DimSum, Rotation2, U1, U2,
+    U3, UnitDualQuaternion,
+};
 
-use super::super::space::LinearSpace;
-use super::orthogonal::SpecialOrthogonalGroup3D;
 use crate::lie::LieGroup;
-use crate::manifold::Manifold;
+use crate::linear::space::{Allocator, DefaultAllocator, InnerProductSpace};
+use crate::manifold::*;
 
-pub type SO2<V> = SpecialEuclideanGroup2D<V>;
-pub type SO3<V> = SpecialEuclideanGroup3D<V>;
+pub type SE<V> = SpecialEuclideanGroup<V>;
 
-pub struct SpecialEuclideanGroup2D<V: LinearSpace<2>> {
-    translation: V,
-    rotation_angle: V::Field,
+pub trait SERepr<V: InnerProductSpace>
+where
+    DefaultAllocator: Allocator<V::Dim>,
+{
+    type Repr;
+    fn identity() -> Self::Repr;
+    fn multiply(a: &Self::Repr, b: &Self::Repr) -> Self::Repr;
+    fn inverse(a: &Self::Repr) -> Self::Repr;
 }
 
-impl<V: LinearSpace<2>> Manifold<2> for SpecialEuclideanGroup2D<V> {
+impl<V: InnerProductSpace<Dim = U2>> SERepr<V> for U2
+where
+    DefaultAllocator: Allocator<V::Dim>,
+{
+    type Repr = (V, V::Field);
+    fn identity() -> Self::Repr {
+        (V::zero(), V::Field::zero())
+    }
+    fn multiply(a: &Self::Repr, b: &Self::Repr) -> Self::Repr {
+        let (t1, theta1) = a;
+        let (t2, theta2) = b;
+        let rotation_matrix = Rotation2::new(*theta1);
+        (
+            V::_from_raw(rotation_matrix * t2._get_raw() + t1._get_raw()),
+            *theta1 + *theta2,
+        )
+    }
+    fn inverse(a: &Self::Repr) -> Self::Repr {
+        let (t, theta) = a;
+        let rotation_matrix = Rotation2::new(-*theta);
+        (V::_from_raw(rotation_matrix * -t._get_raw()), -*theta)
+    }
+}
+
+impl<V: InnerProductSpace> SERepr<V> for U3
+where
+    DefaultAllocator: Allocator<V::Dim>,
+{
+    type Repr = UnitDualQuaternion<V::Field>;
+    fn identity() -> Self::Repr {
+        UnitDualQuaternion::identity()
+    }
+    fn multiply(a: &Self::Repr, b: &Self::Repr) -> Self::Repr {
+        a * b
+    }
+    fn inverse(a: &Self::Repr) -> Self::Repr {
+        a.inverse()
+    }
+}
+
+pub trait DimOfSE {
+    type Dim: DimName;
+}
+
+impl<N: DimName> DimOfSE for N
+where
+    N: DimSub<U1> + DimMul<DimDiff<N, U1>>,
+    DimProd<N, DimDiff<N, U1>>: DimDiv<U2>,
+    DimQuot<DimProd<N, DimDiff<N, U1>>, U2>: DimAdd<N>,
+    DimSum<DimQuot<DimProd<N, DimDiff<N, U1>>, U2>, N>: DimName,
+{
+    type Dim = DimSum<DimQuot<DimProd<N, DimDiff<N, U1>>, U2>, N>;
+}
+
+pub struct SpecialEuclideanGroup<V: InnerProductSpace>
+where
+    V::Dim: SERepr<V>,
+    DefaultAllocator: Allocator<V::Dim>,
+{
+    repr: <V::Dim as SERepr<V>>::Repr,
+}
+
+impl<V: InnerProductSpace> Manifold for SpecialEuclideanGroup<V>
+where
+    V::Dim: SERepr<V> + DimOfSE,
+    DefaultAllocator: Allocator<V::Dim>,
+{
     type Field = V::Field;
+    type Dim = <V::Dim as DimOfSE>::Dim;
 }
 
-impl<V: LinearSpace<2>> LieGroup<3> for SpecialEuclideanGroup2D<V> {
+impl<V: InnerProductSpace> LieGroup for SpecialEuclideanGroup<V>
+where
+    V::Dim: SERepr<V> + DimOfSE,
+    DefaultAllocator: Allocator<V::Dim>,
+{
     fn identity() -> Self {
         Self {
-            translation: V::zero(),
-            rotation_angle: V::Field::zero(),
+            repr: <V::Dim as SERepr<V>>::identity(),
         }
     }
-
     fn multiply(&self, other: &Self) -> Self {
-        let rotation_matrix = na::Rotation2::new(self.angle);
         Self {
-            translation: V::_from_raw(
-                rotation_matrix * other.translation._get_raw() + self.translation._get_raw(),
-            ),
-            rotation_angle: self.rotation_angle + other.rotation_angle,
+            repr: <V::Dim as SERepr<V>>::multiply(&self.repr, &other.repr),
         }
     }
-
     fn inverse(&self) -> Self {
-        let rotation_matrix = na::Rotation2::new(-self.angle);
         Self {
-            translation: V::_from_raw(rotation_matrix * -self.translation._get_raw()),
-            rotation_angle: -self.rotation_angle,
+            repr: <V::Dim as SERepr<V>>::inverse(&self.repr),
         }
-    }
-}
-
-impl<V: LinearSpace<2>> SpecialEuclideanGroup2D<V> {
-    pub fn new(translation: V, rotation_angle: V::Field) -> Self {
-        Self {
-            translation,
-            rotation_angle,
-        }
-    }
-
-    pub fn translation(&self) -> V {
-        self.translation
-    }
-
-    pub fn rotation_angle(&self) -> V::Field {
-        self.rotation_angle
-    }
-}
-
-pub struct SpecialEuclideanGroup3D<V: LinearSpace<3>> {
-    translation: V,
-    rotation_quaternion: na::UnitQuaternion<V::Field>,
-}
-
-impl<V: LinearSpace<3>> Manifold<3> for SpecialEuclideanGroup3D<V> {
-    type Field = V::Field;
-}
-
-impl<V: LinearSpace<3>> LieGroup<6> for SpecialEuclideanGroup3D<V> {
-    fn identity() -> Self {
-        Self {
-            translation: V::zero(),
-            rotation_quaternion: na::UnitQuaternion::identity(),
-        }
-    }
-
-    fn multiply(&self, other: &Self) -> Self {
-        let rotation_matrix = self.rotation_quaternion.to_rotation_matrix();
-        Self {
-            translation: V::_from_raw(
-                rotation_matrix.matrix() * other.translation._get_raw()
-                    + self.translation._get_raw(),
-            ),
-            rotation_quaternion: self.rotation_quaternion * other.rotation_quaternion,
-        }
-    }
-
-    fn inverse(&self) -> Self {
-        let rotation_matrix = self.rotation_quaternion.to_rotation_matrix().inverse();
-        Self {
-            translation: V::_from_raw(rotation_matrix.matrix() * -self.translation._get_raw()),
-            rotation_quaternion: self.rotation_quaternion.inverse(),
-        }
-    }
-}
-
-impl<V: LinearSpace<3>> SpecialEuclideanGroup3D<V> {
-    pub fn new(translation: V, rotation: SpecialOrthogonalGroup3D<V>) -> Self {
-        Self {
-            translation,
-            rotation_quaternion: rotation._quaternion_raw(),
-        }
-    }
-
-    pub fn translation(&self) -> V {
-        self.translation
-    }
-
-    pub fn rotation(&self) -> na::UnitQuaternion<V::Field> {
-        self.rotation_quaternion
     }
 }

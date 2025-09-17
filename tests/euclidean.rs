@@ -5,7 +5,7 @@ use geometrica::euclidean::*;
 #[test]
 fn test_euclid3() {
     {
-        let e = EuclideanSpace::<3>::reference_frame();
+        let e = EuclideanSpace::<U3>::reference_frame();
         let v = e.from_local(&[1.0, 2.0, 3.0]);
         let r = Rotation3D::from_axis_angle(&e.basis[0], PI / 2.0);
         let m = Motion3D::from_rotation(&r, &e.origin);
